@@ -1,5 +1,6 @@
 // Copyright (C) 2012 - Will Glozer.  All rights reserved.
 
+#include <stdlib.h>
 #include "wrk.h"
 #include "script.h"
 #include "main.h"
@@ -10,6 +11,7 @@ static struct config {
     uint64_t threads;
     uint64_t timeout;
     uint64_t pipeline;
+    uint64_t interval;
     bool     delay;
     bool     dynamic;
     bool     latency;
@@ -52,6 +54,7 @@ static void usage() {
            "    -H, --header      <H>  Add header to request      \n"
            "        --latency          Print latency statistics   \n"
            "        --timeout     <T>  Socket/request timeout     \n"
+	   "    -i, --interval    <T>  Interval to report         \n"
            "    -v, --version          Print version details      \n"
            "                                                      \n"
            "  Numeric arguments may include a SI unit (1k, 1M, 1G)\n"
@@ -143,7 +146,39 @@ int main(int argc, char **argv) {
     uint64_t bytes    = 0;
     errors errors     = { 0 };
 
-    sleep(cfg.duration);
+    if (cfg.interval == 0) {
+        sleep(cfg.duration);
+    } else {
+	// Display instantaneous (approximate) throughput and memory results after every interval
+	uint64_t last_runtime_us = 0;
+	uint64_t last_completed = 0;
+	uint64_t last_bytes = 0;
+	uint64_t inttime = 0;
+	uint64_t numIntervals = cfg.duration / cfg.interval;
+	for (uint64_t interval=0;interval < numIntervals;interval++) {
+	    sleep(cfg.interval);
+	    inttime += cfg.interval;
+
+	    uint64_t intcomplete = 0;  // number of requests completed at end of an interval
+	    uint64_t intbytes = 0; // number of bytes transferred at end of an interval
+            for (uint64_t i = 0; i < cfg.threads; i++) {
+                thread *t = &threads[i];
+                intcomplete += t->complete;
+                intbytes += t->bytes;
+	    }
+            uint64_t runtime_us = time_us();
+            long double int_runtime_s = (runtime_us - last_runtime_us) / 1000000.0;
+            long double int_req_per_s = (intcomplete - last_completed) / int_runtime_s;
+
+            printf("At %ld s %9.2Lf requests/sec, %sB read\n", inttime, int_req_per_s, format_binary(intbytes - last_bytes));
+
+	    last_runtime_us = runtime_us;
+	    last_completed = intcomplete;
+	    last_bytes = intbytes;
+	}
+	sleep(cfg.duration % cfg.interval);
+    }
+
     stop = 1;
 
     for (uint64_t i = 0; i < cfg.threads; i++) {
@@ -474,6 +509,7 @@ static struct option longopts[] = {
     { "header",      required_argument, NULL, 'H' },
     { "latency",     no_argument,       NULL, 'L' },
     { "timeout",     required_argument, NULL, 'T' },
+    { "interval",    required_argument, NULL, 'i' },
     { "help",        no_argument,       NULL, 'h' },
     { "version",     no_argument,       NULL, 'v' },
     { NULL,          0,                 NULL,  0  }
@@ -489,7 +525,7 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
     cfg->duration    = 10;
     cfg->timeout     = SOCKET_TIMEOUT_MS;
 
-    while ((c = getopt_long(argc, argv, "t:c:d:s:H:T:Lrv?", longopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "t:c:d:s:i:H:T:Lrv?", longopts, NULL)) != -1) {
         switch (c) {
             case 't':
                 if (scan_metric(optarg, &cfg->threads)) return -1;
@@ -505,6 +541,9 @@ static int parse_args(struct config *cfg, char **url, struct http_parser_url *pa
                 break;
             case 'H':
                 *header++ = optarg;
+                break;
+            case 'i':
+                if (scan_time(optarg, &cfg->interval)) return -1;
                 break;
             case 'L':
                 cfg->latency = true;

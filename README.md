@@ -44,6 +44,8 @@
         --timeout:     record a timeout if a response is not received within
                        this amount of time.
 
+    -i, --interval:    report approximate interim stats after each interval
+
 ## Benchmarking Tips
 
   The machine running wrk must have a sufficient number of ephemeral ports
