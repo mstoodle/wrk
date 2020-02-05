@@ -170,7 +170,7 @@ int main(int argc, char **argv) {
             long double int_runtime_s = (runtime_us - last_runtime_us) / 1000000.0;
             long double int_req_per_s = (intcomplete - last_completed) / int_runtime_s;
 
-            printf("At %ld s %9.2Lf requests/sec, %sB read\n", inttime, int_req_per_s, format_binary(intbytes - last_bytes));
+            printf("At %ld s %9.2Lf requests/sec, %ld requests %sB read\n", inttime, int_req_per_s, intcomplete, format_binary(intbytes - last_bytes));
 
 	    last_runtime_us = runtime_us;
 	    last_completed = intcomplete;
